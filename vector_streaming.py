@@ -41,8 +41,21 @@ def main():
         print("Usage: python vector_streaming.py <mode> <question>")
         sys.exit(1)
 
-    mode = sys.argv[1]
-    question = sys.argv[2]
+    # Normalize mode aliases (e.g., "fix" -> "debug")
+    raw_mode = sys.argv[1].lower()
+    alias_map = {
+        "fix": "debug",
+        "explain": "explain",
+        "debug": "debug",
+        "generate": "generate",
+        "review": "review",
+        "optimize": "optimize",
+        "edit": "edit",
+    }
+    mode = alias_map.get(raw_mode, "explain")
+
+    # Support questions with spaces by joining remaining args
+    question = " ".join(sys.argv[2:])
 
     prompt = ChatPromptTemplate.from_template(template)
     chain = prompt | model

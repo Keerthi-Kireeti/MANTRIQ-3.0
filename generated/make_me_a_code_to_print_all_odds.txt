@@ -1,0 +1,9 @@
+def print_odd_primes(n): # n is the upper limit for primes
+    odd = [x for x in range(1, n+1) if x % 2 == 1 and isprime(x)]
+    print(odd)
+    
+def isprime(n): # checks if a number is prime
+    if n == 1 or n % 2 == 0: return False
+    for i in range(2, int(n**0.5) + 1):
+        if n % i == 0: return False
+    return True

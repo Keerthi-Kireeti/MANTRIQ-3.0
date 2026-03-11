@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { motion } from "framer-motion";
-import { Send, Terminal, Loader2, FileUp, X, GitCompareArrows } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Send, Terminal, Loader2, FileUp, X, GitCompareArrows, Undo2, Redo2, Wand2, Save } from "lucide-react";
 import { FiSend } from "react-icons/fi";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -10,6 +10,22 @@ import { getLanguage } from "@/lib/utils";
 import ReactDiffViewer from "react-diff-viewer-continued";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import TreeView from "@/components/TreeView";
+import { useHistory } from "@/hooks/useHistory";
+import ActionBar from "@/components/ActionBar";
+import AnimatedBackdrop from "@/components/AnimatedBackdrop";
+
+const listVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.05, when: "beforeChildren" },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 6 },
+  visible: { opacity: 1, y: 0 },
+};
 
 interface Message {
   role: "user" | "assistant" | "system";
@@ -29,8 +45,32 @@ export default function Dashboard() {
   const [code, setCode] = useState("");
   const [isSaved, setIsSaved] = useState(true);
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [generatedFile, setGeneratedFile] = useState<{ filename: string; url: string } | null>(null);
+  const [inputFocused, setInputFocused] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const messagesRef = useRef<Message[]>([]);
+
+  type Snapshot = {
+    input: string;
+    code: string;
+    messages: Message[];
+    generatedFile: { filename: string; url: string } | null;
+  };
+  const { current, record, undo, redo, canUndo, canRedo } = useHistory<Snapshot>({ input: "", code: "", messages: [], generatedFile: null });
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
+    // Sync UI when stepping through history
+    if (!current) return;
+    setInput(current.input);
+    setCode(current.code);
+    setMessages(current.messages);
+    setGeneratedFile(current.generatedFile);
+  }, [current]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -70,17 +110,52 @@ export default function Dashboard() {
       const response = await fetch("/api/save-file", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ file_path: "g:\\MANTRIQ 2.0\\main.py", content: code }),
+        body: JSON.stringify({
+          file_path: fileInfo?.name || "uploaded_code.txt",
+          content: code,
+        }),
       });
       const data = await response.json();
       if (response.ok) {
         setIsSaved(true);
+        // Record step after a successful save
+        record({ input, code, messages: messagesRef.current, generatedFile });
       } else {
         alert(`Error saving file: ${data.error}`);
       }
     } catch (error) {
       console.error("Error saving file:", error);
       alert("An unexpected error occurred while saving the file.");
+    }
+  };
+
+  const handleGenerateFile = async () => {
+    if (!input.trim() && !code.trim()) return;
+    setIsLoading(true);
+    setGeneratedFile(null);
+    try {
+      const payload = { prompt: input.trim() || code.substring(0, 200) };
+      const res = await fetch("/api/generate-file", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to generate file");
+      const url = `/api/download?file=${encodeURIComponent(data.filename)}`;
+      setGeneratedFile({ filename: data.filename, url });
+      const genMsg: Message = { role: "system", content: `Generated file: ${data.filename}` };
+      setMessages((prev) => [...prev, genMsg]);
+      // Predict next state and record it for step history
+      const nextMessages = [...messagesRef.current, genMsg];
+      record({ input, code, messages: nextMessages, generatedFile: { filename: data.filename, url } });
+    } catch (e: any) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: `ERROR: ${e.message || String(e)}` },
+      ]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -134,19 +209,14 @@ export default function Dashboard() {
 
       setInput(`Explain the following ${language} code:`);
 
-      try {
-        const response = await fetch("/api/read-file", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ file_path: file.name }),
-        });
-        const data = await response.json();
-        if (data.content) {
-          setCode(data.content);
-        }
-      } catch (error) {
-        console.error("Error fetching file content:", error);
-      }
+      // Record step for file upload state
+      const nextMessages = [
+        ...messagesRef.current,
+        { role: "system", content: `File uploaded: ${file.name}` },
+      ];
+      record({ input: `Explain the following ${language} code:`, code: content, messages: nextMessages, generatedFile });
+
+      // Removed server-side read of client file path (not accessible by server).
     };
     reader.readAsText(file);
   };
@@ -156,6 +226,7 @@ export default function Dashboard() {
     setFileInfo(null);
     setInput("");
     setCode("");
+    record({ input: "", code: "", messages: messagesRef.current, generatedFile });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -171,10 +242,13 @@ export default function Dashboard() {
     setIsLoading(true);
 
     try {
-      const response = await fetch("/api/mantriq", {
+      const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode, code: cleanedInput }),
+        body: JSON.stringify({ 
+          mode, 
+          code: uploadedCode ? `${cleanedInput}\n\nCode:\n${uploadedCode}` : cleanedInput 
+        }),
       });
 
       if (!response.body) {
@@ -194,6 +268,8 @@ export default function Dashboard() {
           if (uploadedCode) {
             setAiGeneratedCode(fullResponse);
           }
+          // Record chat completion step
+          record({ input: "", code, messages: messagesRef.current, generatedFile });
           break;
         }
 
@@ -238,33 +314,39 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col">
+    <div className="min-h-screen text-white bg-gradient-to-br from-black via-zinc-950 to-black flex flex-col">
       <Header />
 
-      <main className="flex-1 pt-20 flex flex-col h-screen">
+      <main className="relative flex-1 pt-20 flex flex-col h-screen">
+        {/* Animated dynamic backdrop */}
+        <AnimatedBackdrop />
         <div className="container mx-auto max-w-full flex flex-col flex-1 p-4">
-          <div className="flex items-center justify-between mb-4">
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Terminal className="w-6 h-6" />
               <h2 className="text-lg font-semibold">Terminal</h2>
             </div>
             {uploadedCode && (
               <div className="flex items-center gap-2">
-                <button
+                <motion.button
                   onClick={() => setActiveTab("chat")}
                   className={`px-3 py-1 border rounded-md text-sm ${activeTab === "chat" ? "bg-white text-black" : "border-white"}`}
+                  whileHover={{ y: -1, scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
                 >
                   Chat
-                </button>
-                <button
+                </motion.button>
+                <motion.button
                   onClick={() => setActiveTab("compare")}
                   className={`px-3 py-1 border rounded-md text-sm ${activeTab === "compare" ? "bg-white text-black" : "border-white"}`}
+                  whileHover={{ y: -1, scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
                 >
                   Compare
-                </button>
+                </motion.button>
               </div>
             )}
-          </div>
+          </motion.div>
 
           {activeTab === "compare" && uploadedCode ? (
             <div className="flex-1 terminal-border overflow-hidden">
@@ -278,14 +360,14 @@ export default function Dashboard() {
               />
             </div>
           ) : (
-            <div className="flex-1 flex flex-col-reverse rounded-lg overflow-hidden">
+            <div className="flex-1 flex flex-col-reverse rounded-2xl overflow-hidden">
               {/* Input Area */}
-              <form onSubmit={handleSubmit} className="border-t border-white p-4">
-                <div className="flex items-center gap-2">
+              <form onSubmit={handleSubmit} className="border-t border-white/10 p-4 bg-white/5 backdrop-blur supports-[backdrop-filter]:bg-white/5 focus-within:bg-white/10 focus-within:border-white/20 transition-colors">
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => document.getElementById('file-upload-input')?.click()}
-                    className="p-2 hover:bg-black rounded-full"
+                    className="p-2 rounded-full border border-white/10 hover:bg-white/10 transition"
                   >
                     <FileUp className="w-5 h-5" />
                   </button>
@@ -293,7 +375,7 @@ export default function Dashboard() {
                     <button
                       type="button"
                       onClick={() => setIsFullScreen(!isFullScreen)}
-                      className="p-2 hover:bg-black rounded-full"
+                      className="p-2 rounded-full border border-white/10 hover:bg-white/10 transition"
                     >
                       <Terminal className="w-5 h-5" />
                     </button>
@@ -315,59 +397,110 @@ export default function Dashboard() {
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
+                    onFocus={() => setInputFocused(true)}
+                    onBlur={() => setInputFocused(false)}
                     placeholder="Ask a question or type a command..."
-                    className="flex-1 bg-black text-white rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-white"
+                    className="flex-1 bg-black/60 border border-white/10 text-white rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-white/40"
                   />
+                  <motion.button
+                    type="button"
+                    onClick={undo}
+                    className="p-2 rounded-full border border-white/20 hover:bg-white hover:text-black transition-colors disabled:opacity-30"
+                    disabled={!canUndo}
+                    title="Undo"
+                    whileTap={{ scale: 0.92 }}
+                  >
+                    <Undo2 className="w-5 h-5" />
+                  </motion.button>
+                  <motion.button
+                    type="button"
+                    onClick={redo}
+                    className="p-2 rounded-full border border-white/20 hover:bg-white hover:text-black transition-colors disabled:opacity-30"
+                    disabled={!canRedo}
+                    title="Redo"
+                    whileTap={{ scale: 0.92 }}
+                  >
+                    <Redo2 className="w-5 h-5" />
+                  </motion.button>
+                  <motion.button
+                    type="button"
+                    onClick={handleGenerateFile}
+                    className="p-2 rounded-full border border-white/20 hover:bg-white hover:text-black transition-colors"
+                    disabled={isLoading}
+                    title="Generate file"
+                    whileTap={{ scale: 0.92 }}
+                  >
+                    <Wand2 className="w-5 h-5" />
+                  </motion.button>
+                  <motion.button
+                    type="button"
+                    onClick={handleSave}
+                    className="p-2 rounded-full border border-white/20 hover:bg-white hover:text-black transition-colors"
+                    disabled={isLoading}
+                    title="Save file"
+                    whileTap={{ scale: 0.92 }}
+                  >
+                    <Save className="w-5 h-5" />
+                  </motion.button>
                   <button
                     onClick={handleSend}
-                    className="ml-4 bg-white text-black rounded-lg px-6 py-2 hover:bg-white focus:outline-none focus:ring-2 focus:ring-white disabled:opacity-50"
+                    className="ml-2 bg-white text-black rounded-lg px-5 py-2 hover:bg-white focus:outline-none focus:ring-2 focus:ring-white disabled:opacity-50 shadow shadow-white/10"
                     disabled={isLoading}
                   >
                     <FiSend />
                   </button>
-                </div>
+                </motion.div>
               </form>
 
               {/* Quick Commands Bar & Speed Control */}
-              <div className="border-t border-white px-4 py-2 flex justify-between items-center text-xs">
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: inputFocused ? 1 : 0.95, y: inputFocused ? 0 : 2 }} transition={{ duration: 0.35 }} className="border-t border-white/10 px-4 py-2 flex justify-between items-center text-xs bg-white/5">
                 <div className="flex flex-wrap gap-2">
                   {quickCommands.map((cmd) => (
-                    <button
+                    <motion.button
                       key={cmd.label}
                       onClick={() => setInput(cmd.label + " ")}
-                      className="px-2 py-1 border border-white hover:bg-white hover:text-black transition-colors"
+                      className="px-2 py-1 border border-white/20 hover:bg-white hover:text-black transition-colors rounded-md"
+                      whileHover={{ y: -1, scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
                       title={cmd.desc}
                     >
                       {cmd.label}
-                    </button>
+                    </motion.button>
                   ))}
                 </div>
 
-              </div>
+              </motion.div>
 
               {/* Messages Area */}
-              <div className="overflow-y-auto p-4 space-y-3 font-mono text-sm no-scrollbar">
+              <motion.div
+                className="overflow-y-auto p-4 space-y-3 font-mono text-sm no-scrollbar"
+                variants={listVariants}
+                initial="hidden"
+                animate="visible"
+              >
+                {generatedFile && (
+                  <motion.div className="text-white" variants={itemVariants} layout>
+                    <span className="text-white">[FILE]</span> Generated: {generatedFile.filename}{" "}
+                    <a className="underline" href={generatedFile.url}>
+                      Download
+                    </a>
+                  </motion.div>
+                )}
                 {messages.map((message, index) => (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, y: 5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="whitespace-pre-wrap"
-                  >
+                  <motion.div key={index} variants={itemVariants} layout className="whitespace-pre-wrap">
                     {message.role === "system" && (
-                      <div className="text-white">
+                      <div className="text-white/90 bg-white/5 border border-white/10 rounded-md px-3 py-2">
                         <span className="text-white">[SYSTEM]</span> {typeof message.content === 'string' ? message.content : <>{message.content}</>}
                       </div>
                     )}
                     {message.role === "user" && (
-                      <div>
+                      <div className="hover:bg-white/5 rounded-md px-2 py-1 transition-colors">
                         <span className="text-white">$ </span>
                         <span className="text-white">{message.content}</span>
                       </div>
                     )}
                     {message.role === "assistant" && (
-                      <div className="text-white ml-2 border-l border-white pl-3">
+                      <div className="text-white ml-2 border-l border-white/30 pl-3 hover:bg-white/5 rounded-md px-2 py-1 transition-colors">
                         {message.content}
                         {isLoading && index === messages.length - 1 && (
                           <span className="animate-pulse">|</span>
@@ -377,39 +510,63 @@ export default function Dashboard() {
                   </motion.div>
                 ))}
                 {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="flex items-center gap-2 text-white"
-                  >
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 text-white">
                     <Loader2 className="w-4 h-4 animate-spin" />
                     <span>AI is typing...</span>
                   </motion.div>
                 )}
                 <div ref={messagesEndRef} />
-              </div>
+              </motion.div>
             </div>
           )}
         </div>
+        {/* Floating action bar */}
+        <ActionBar
+          onUndo={undo}
+          onRedo={redo}
+          onGenerate={handleGenerateFile}
+          onSave={handleSave}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          disabled={isLoading}
+        />
       </main>
 
-      {isFullScreen && (
-        <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex flex-col p-4">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold">{fileInfo?.name}</h3>
-            <button onClick={() => setIsFullScreen(false)} className="p-2 hover:bg-black rounded-full">
-              <X className="w-6 h-6" />
-            </button>
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            <pre>
-              <SyntaxHighlighter language={fileInfo?.language || 'python'} showLineNumbers>
-                {code}
-              </SyntaxHighlighter>
-            </pre>
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {isFullScreen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/90 z-50 flex flex-col p-4"
+          >
+            <motion.div
+              initial={{ y: 16, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 16, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 240, damping: 24 }}
+              className="flex justify-between items-center mb-4"
+            >
+              <h3 className="text-lg font-semibold">{fileInfo?.name}</h3>
+              <button onClick={() => setIsFullScreen(false)} className="p-2 hover:bg-white/10 rounded-full">
+                <X className="w-6 h-6" />
+              </button>
+            </motion.div>
+            <motion.div
+              initial={{ y: 12, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 12, opacity: 0 }}
+              className="flex-1 overflow-y-auto"
+            >
+              <pre>
+                <SyntaxHighlighter language={fileInfo?.language || 'python'} showLineNumbers>
+                  {code}
+                </SyntaxHighlighter>
+              </pre>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
 
     </div>

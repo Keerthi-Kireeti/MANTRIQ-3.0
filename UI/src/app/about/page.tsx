@@ -8,14 +8,24 @@ import Footer from "@/components/Footer";
 export default function About() {
   const team = [
     {
-      name: "KK",
+      name: "Keerthi Kireeti",
       role: "Lead Developer & AI Architect",
       description: "Passionate about building intelligent systems",
     },
     {
-      name: "Team Lazarus",
-      role: "Development Team",
-      description: "Engineers committed to revolutionizing code assistance",
+      name: "Ramya Swetha Sri",
+      role: "UI/UX Designer",
+      description: "Creative designer with a focus on user-centered experiences",
+    },
+    {
+      name: "Likitha",
+      role: "Data Gathering",
+      description: "Expert in collecting and structuring data for AI models",
+    },
+    {
+      name: "Pruthvi",
+      role: "Fine Tuning",
+      description: "Expert in optimizing AI models for specific tasks",
     },
   ];
 
@@ -48,7 +58,7 @@ export default function About() {
           >
             <div className="flex items-center gap-2 mb-6 border-b border-white pb-4">
               <Terminal className="w-5 h-5" />
-              <span className="text-sm">ABOUT MANTRIQ 2.0</span>
+              <span className="text-sm">ABOUT MANTRIQ</span>
             </div>
             
             <div className="space-y-4 text-sm">
@@ -56,7 +66,7 @@ export default function About() {
                 <span className="text-gray-400">$</span> cat about.txt
               </p>
               <p className="text-gray-400 ml-4">
-                Built by developers, for developers. MANTRIQ 2.0 represents the next evolution
+                Built by developers, for developers. MANTRIQ represents the next evolution
                 in AI-powered code assistance, combining cutting-edge technology with practical solutions.
               </p>
             </div>
@@ -75,7 +85,7 @@ export default function About() {
             <p className="text-sm text-gray-400">
               <ChevronRight className="w-4 h-4 inline mr-2" />
               We believe every developer deserves an intelligent companion that understands their code,
-              anticipates their needs, and accelerates their workflow. MANTRIQ 2.0 is designed to be
+              anticipates their needs, and accelerates their workflow. MANTRIQ is designed to be
               that companion—powerful, intuitive, and always ready to help.
             </p>
           </motion.div>
