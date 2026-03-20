@@ -1,0 +1,6 @@
+Create session error: SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+    at JSON.parse (<anonymous>)
+    at async p (G:\MANTRIQ 2.0(VWI)\UI\.next\server\app\api\mentor\sessions\route.js:1:624)
+API Error: SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+    at JSON.parse (<anonymous>)
+    at async p (G:\MANTRIQ 2.0(VWI)\UI\.next\server\app\api\chat\route.js:1:914)

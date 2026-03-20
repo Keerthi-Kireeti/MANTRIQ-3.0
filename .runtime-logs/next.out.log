@@ -1,0 +1,20 @@
+
+> app@0.1.0 dev
+> next dev --turbopack --port 3000
+
+   ▲ Next.js 15.3.5 (Turbopack)
+   - Local:        http://localhost:3000
+   - Network:      http://172.26.185.95:3000
+
+ ✓ Starting...
+Creating turbopack project { dir: 'G:\\MANTRIQ 2.0(VWI)\\UI', testMode: true }
+ ✓ Ready in 831ms
+ ○ Compiling /api/mentor/bootstrap ...
+ GET /api/mentor/bootstrap 200 in 775ms
+ ✓ Compiled /api/mentor/bootstrap in 1712ms
+ GET /mentor 200 in 1938ms
+ ○ Compiling /api/mentor/challenges/[id] ...
+ POST /api/mentor/challenges/2 200 in 798ms
+ ✓ Compiled /api/mentor/challenges/[id] in 1075ms
+ POST /api/mentor/attempts/3/hint 200 in 7296ms
+ POST /api/chat 200 in 12495ms

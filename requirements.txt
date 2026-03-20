@@ -2,3 +2,5 @@ Flask
 Flask-Cors
 langchain_ollama
 langchain_core
+langchain
+python-dotenv

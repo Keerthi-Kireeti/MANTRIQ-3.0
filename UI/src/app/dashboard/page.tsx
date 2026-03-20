@@ -191,15 +191,15 @@ export default function Dashboard() {
         {
           role: "system",
           content: (
-            <div className="bg-black p-4 rounded-lg">
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-4 rounded-lg border border-blue-200">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <FileUp className="w-4 h-4" />
-                  <span className="font-semibold">{file.name}</span>
-                  <span className="text-xs text-white">({language})</span>
+                  <FileUp className="w-4 h-4 text-blue-600" />
+                  <span className="font-semibold text-gray-900">{file.name}</span>
+                  <span className="text-xs text-gray-600">({language})</span>
                 </div>
               </div>
-              <pre className="mt-2 bg-black p-2 rounded-lg overflow-x-auto">
+              <pre className="mt-2 bg-gray-100 p-2 rounded-lg overflow-x-auto text-gray-800 text-xs">
                 <code>{content.substring(0, 100)}...</code>
               </pre>
             </div>
@@ -215,8 +215,6 @@ export default function Dashboard() {
         { role: "system", content: `File uploaded: ${file.name}` },
       ];
       record({ input: `Explain the following ${language} code:`, code: content, messages: nextMessages, generatedFile });
-
-      // Removed server-side read of client file path (not accessible by server).
     };
     reader.readAsText(file);
   };
@@ -314,32 +312,32 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="min-h-screen text-white bg-gradient-to-br from-black via-zinc-950 to-black flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-purple-50 flex flex-col">
       <Header />
 
       <main className="relative flex-1 pt-20 flex flex-col h-screen">
-        {/* Animated dynamic backdrop */}
-        <AnimatedBackdrop />
         <div className="container mx-auto max-w-full flex flex-col flex-1 p-4">
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Terminal className="w-6 h-6" />
-              <h2 className="text-lg font-semibold">Terminal</h2>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-br from-purple-500 to-blue-500 rounded-lg">
+                <Terminal className="w-6 h-6 text-white" />
+              </div>
+              <h2 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">Code Assistant</h2>
             </div>
             {uploadedCode && (
               <div className="flex items-center gap-2">
                 <motion.button
                   onClick={() => setActiveTab("chat")}
-                  className={`px-3 py-1 border rounded-md text-sm ${activeTab === "chat" ? "bg-white text-black" : "border-white"}`}
-                  whileHover={{ y: -1, scale: 1.02 }}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "chat" ? "bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg" : "bg-white text-gray-600 border border-gray-200 hover:border-purple-300"}`}
+                  whileHover={{ y: -2, scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                 >
                   Chat
                 </motion.button>
                 <motion.button
                   onClick={() => setActiveTab("compare")}
-                  className={`px-3 py-1 border rounded-md text-sm ${activeTab === "compare" ? "bg-white text-black" : "border-white"}`}
-                  whileHover={{ y: -1, scale: 1.02 }}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "compare" ? "bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg" : "bg-white text-gray-600 border border-gray-200 hover:border-purple-300"}`}
+                  whileHover={{ y: -2, scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                 >
                   Compare
@@ -349,25 +347,25 @@ export default function Dashboard() {
           </motion.div>
 
           {activeTab === "compare" && uploadedCode ? (
-            <div className="flex-1 terminal-border overflow-hidden">
+            <div className="flex-1 rounded-2xl overflow-hidden border border-purple-200 shadow-xl">
               <ReactDiffViewer
                 oldValue={uploadedCode}
                 newValue={aiGeneratedCode || ""}
                 splitView={true}
                 leftTitle={fileInfo?.name || "Original Code"}
                 rightTitle="AI Generated Code"
-                useDarkTheme={true}
+                useDarkTheme={false}
               />
             </div>
           ) : (
-            <div className="flex-1 flex flex-col-reverse rounded-2xl overflow-hidden">
+            <div className="flex-1 flex flex-col-reverse rounded-2xl overflow-hidden border border-purple-200 shadow-lg bg-white">
               {/* Input Area */}
-              <form onSubmit={handleSubmit} className="border-t border-white/10 p-4 bg-white/5 backdrop-blur supports-[backdrop-filter]:bg-white/5 focus-within:bg-white/10 focus-within:border-white/20 transition-colors">
+              <form onSubmit={handleSubmit} className="border-t border-purple-100 p-4 bg-gradient-to-r from-purple-50 to-blue-50 focus-within:from-purple-100 focus-within:to-blue-100 transition-colors">
                 <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => document.getElementById('file-upload-input')?.click()}
-                    className="p-2 rounded-full border border-white/10 hover:bg-white/10 transition"
+                    className="p-2 rounded-full bg-gradient-to-br from-purple-100 to-blue-100 text-purple-600 hover:shadow-md transition-all"
                   >
                     <FileUp className="w-5 h-5" />
                   </button>
@@ -375,7 +373,7 @@ export default function Dashboard() {
                     <button
                       type="button"
                       onClick={() => setIsFullScreen(!isFullScreen)}
-                      className="p-2 rounded-full border border-white/10 hover:bg-white/10 transition"
+                      className="p-2 rounded-full bg-gradient-to-br from-purple-100 to-blue-100 text-purple-600 hover:shadow-md transition-all"
                     >
                       <Terminal className="w-5 h-5" />
                     </button>
@@ -390,7 +388,7 @@ export default function Dashboard() {
                       }
                     }}
                   />
-                  <span className="text-gray-400 text-sm">$</span>
+                  <span className="text-purple-400 text-sm">#</span>
                   <input
                     ref={inputRef}
                     type="text"
@@ -400,12 +398,12 @@ export default function Dashboard() {
                     onFocus={() => setInputFocused(true)}
                     onBlur={() => setInputFocused(false)}
                     placeholder="Ask a question or type a command..."
-                    className="flex-1 bg-black/60 border border-white/10 text-white rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-white/40"
+                    className="flex-1 bg-white border border-purple-200 text-gray-800 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent placeholder-gray-400"
                   />
                   <motion.button
                     type="button"
                     onClick={undo}
-                    className="p-2 rounded-full border border-white/20 hover:bg-white hover:text-black transition-colors disabled:opacity-30"
+                    className="p-2 rounded-full bg-gray-100 text-gray-600 hover:bg-gradient-to-br hover:from-purple-200 hover:to-blue-200 hover:text-purple-700 transition-all disabled:opacity-30"
                     disabled={!canUndo}
                     title="Undo"
                     whileTap={{ scale: 0.92 }}
@@ -415,7 +413,7 @@ export default function Dashboard() {
                   <motion.button
                     type="button"
                     onClick={redo}
-                    className="p-2 rounded-full border border-white/20 hover:bg-white hover:text-black transition-colors disabled:opacity-30"
+                    className="p-2 rounded-full bg-gray-100 text-gray-600 hover:bg-gradient-to-br hover:from-purple-200 hover:to-blue-200 hover:text-purple-700 transition-all disabled:opacity-30"
                     disabled={!canRedo}
                     title="Redo"
                     whileTap={{ scale: 0.92 }}
@@ -425,7 +423,7 @@ export default function Dashboard() {
                   <motion.button
                     type="button"
                     onClick={handleGenerateFile}
-                    className="p-2 rounded-full border border-white/20 hover:bg-white hover:text-black transition-colors"
+                    className="p-2 rounded-full bg-gradient-to-br from-purple-100 to-blue-100 text-purple-600 hover:shadow-md transition-all disabled:opacity-50"
                     disabled={isLoading}
                     title="Generate file"
                     whileTap={{ scale: 0.92 }}
@@ -435,7 +433,7 @@ export default function Dashboard() {
                   <motion.button
                     type="button"
                     onClick={handleSave}
-                    className="p-2 rounded-full border border-white/20 hover:bg-white hover:text-black transition-colors"
+                    className="p-2 rounded-full bg-gradient-to-br from-purple-100 to-blue-100 text-purple-600 hover:shadow-md transition-all disabled:opacity-50"
                     disabled={isLoading}
                     title="Save file"
                     whileTap={{ scale: 0.92 }}
@@ -444,7 +442,7 @@ export default function Dashboard() {
                   </motion.button>
                   <button
                     onClick={handleSend}
-                    className="ml-2 bg-white text-black rounded-lg px-5 py-2 hover:bg-white focus:outline-none focus:ring-2 focus:ring-white disabled:opacity-50 shadow shadow-white/10"
+                    className="ml-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg px-5 py-2 hover:shadow-lg hover:shadow-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-400 disabled:opacity-50 font-medium transition-all"
                     disabled={isLoading}
                   >
                     <FiSend />
@@ -452,16 +450,16 @@ export default function Dashboard() {
                 </motion.div>
               </form>
 
-              {/* Quick Commands Bar & Speed Control */}
-              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: inputFocused ? 1 : 0.95, y: inputFocused ? 0 : 2 }} transition={{ duration: 0.35 }} className="border-t border-white/10 px-4 py-2 flex justify-between items-center text-xs bg-white/5">
+              {/* Quick Commands Bar */}
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: inputFocused ? 1 : 0.95, y: inputFocused ? 0 : 2 }} transition={{ duration: 0.35 }} className="border-t border-purple-100 px-4 py-3 flex justify-between items-center text-xs bg-gradient-to-r from-purple-50 to-blue-50">
                 <div className="flex flex-wrap gap-2">
                   {quickCommands.map((cmd) => (
                     <motion.button
                       key={cmd.label}
                       onClick={() => setInput(cmd.label + " ")}
-                      className="px-2 py-1 border border-white/20 hover:bg-white hover:text-black transition-colors rounded-md"
-                      whileHover={{ y: -1, scale: 1.03 }}
-                      whileTap={{ scale: 0.97 }}
+                      className="px-3 py-1.5 bg-white border border-purple-200 text-purple-600 hover:bg-gradient-to-r hover:from-purple-500 hover:to-blue-500 hover:text-white hover:border-transparent rounded-md font-medium transition-all"
+                      whileHover={{ y: -2, scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
                       title={cmd.desc}
                     >
                       {cmd.label}
@@ -473,15 +471,15 @@ export default function Dashboard() {
 
               {/* Messages Area */}
               <motion.div
-                className="overflow-y-auto p-4 space-y-3 font-mono text-sm no-scrollbar"
+                className="overflow-y-auto p-6 space-y-4 font-mono text-sm no-scrollbar"
                 variants={listVariants}
                 initial="hidden"
                 animate="visible"
               >
                 {generatedFile && (
-                  <motion.div className="text-white" variants={itemVariants} layout>
-                    <span className="text-white">[FILE]</span> Generated: {generatedFile.filename}{" "}
-                    <a className="underline" href={generatedFile.url}>
+                  <motion.div className="text-gray-800 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg px-4 py-3" variants={itemVariants} layout>
+                    <span className="font-bold text-green-600">[FILE]</span> Generated: <span className="font-semibold">{generatedFile.filename}</span>{" "}
+                    <a className="underline text-purple-600 hover:text-purple-700 font-medium" href={generatedFile.url}>
                       Download
                     </a>
                   </motion.div>
@@ -489,18 +487,18 @@ export default function Dashboard() {
                 {messages.map((message, index) => (
                   <motion.div key={index} variants={itemVariants} layout className="whitespace-pre-wrap">
                     {message.role === "system" && (
-                      <div className="text-white/90 bg-white/5 border border-white/10 rounded-md px-3 py-2">
-                        <span className="text-white">[SYSTEM]</span> {typeof message.content === 'string' ? message.content : <>{message.content}</>}
+                      <div className="text-gray-700 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg px-4 py-3">
+                        <span className="font-bold text-blue-600">[SYSTEM]</span> {typeof message.content === 'string' ? message.content : <>{message.content}</>}
                       </div>
                     )}
                     {message.role === "user" && (
-                      <div className="hover:bg-white/5 rounded-md px-2 py-1 transition-colors">
-                        <span className="text-white">$ </span>
-                        <span className="text-white">{message.content}</span>
+                      <div className="hover:bg-purple-50 rounded-lg px-4 py-2 transition-colors text-gray-800">
+                        <span className="text-purple-600 font-bold"># </span>
+                        <span>{message.content}</span>
                       </div>
                     )}
                     {message.role === "assistant" && (
-                      <div className="text-white ml-2 border-l border-white/30 pl-3 hover:bg-white/5 rounded-md px-2 py-1 transition-colors">
+                      <div className="text-gray-800 ml-2 border-l-4 border-gradient-to-b from-purple-500 to-blue-500 pl-4 hover:bg-purple-50 rounded-md px-4 py-2 transition-colors bg-gradient-to-r from-purple-50/50 to-blue-50/50">
                         {message.content}
                         {isLoading && index === messages.length - 1 && (
                           <span className="animate-pulse">|</span>
@@ -510,7 +508,7 @@ export default function Dashboard() {
                   </motion.div>
                 ))}
                 {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 text-white">
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 text-purple-600 font-medium">
                     <Loader2 className="w-4 h-4 animate-spin" />
                     <span>AI is typing...</span>
                   </motion.div>
@@ -538,7 +536,7 @@ export default function Dashboard() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/90 z-50 flex flex-col p-4"
+            className="fixed inset-0 bg-gradient-to-br from-gray-900/95 to-gray-900/95 backdrop-blur-sm z-50 flex flex-col p-4"
           >
             <motion.div
               initial={{ y: 16, opacity: 0 }}
@@ -547,8 +545,8 @@ export default function Dashboard() {
               transition={{ type: "spring", stiffness: 240, damping: 24 }}
               className="flex justify-between items-center mb-4"
             >
-              <h3 className="text-lg font-semibold">{fileInfo?.name}</h3>
-              <button onClick={() => setIsFullScreen(false)} className="p-2 hover:bg-white/10 rounded-full">
+              <h3 className="text-lg font-semibold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">{fileInfo?.name}</h3>
+              <button onClick={() => setIsFullScreen(false)} className="p-2 hover:bg-white/10 rounded-full text-white">
                 <X className="w-6 h-6" />
               </button>
             </motion.div>
@@ -556,7 +554,7 @@ export default function Dashboard() {
               initial={{ y: 12, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 12, opacity: 0 }}
-              className="flex-1 overflow-y-auto"
+              className="flex-1 overflow-y-auto rounded-xl border border-white/10"
             >
               <pre>
                 <SyntaxHighlighter language={fileInfo?.language || 'python'} showLineNumbers>

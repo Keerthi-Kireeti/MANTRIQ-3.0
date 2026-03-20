@@ -1,0 +1,31 @@
+ ⨯ [Error: Cannot find module '../chunks/ssr/[turbopack]_runtime.js'
+Require stack:
+- G:\MANTRIQ 2.0(VWI)\UI\.next\server\pages\_document.js
+- G:\MANTRIQ 2.0(VWI)\UI\node_modules\next\dist\server\require.js
+- G:\MANTRIQ 2.0(VWI)\UI\node_modules\next\dist\server\load-components.js
+- G:\MANTRIQ 2.0(VWI)\UI\node_modules\next\dist\build\utils.js
+- G:\MANTRIQ 2.0(VWI)\UI\node_modules\next\dist\build\swc\options.js
+- G:\MANTRIQ 2.0(VWI)\UI\node_modules\next\dist\build\swc\index.js
+- G:\MANTRIQ 2.0(VWI)\UI\node_modules\next\dist\build\next-config-ts\transpile-config.js
+- G:\MANTRIQ 2.0(VWI)\UI\node_modules\next\dist\server\config.js
+- G:\MANTRIQ 2.0(VWI)\UI\node_modules\next\dist\cli\next-test.js
+- G:\MANTRIQ 2.0(VWI)\UI\node_modules\next\dist\bin\next] {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [Array]
+}
+ ⨯ [Error: Cannot find module '../chunks/ssr/[turbopack]_runtime.js'
+Require stack:
+- G:\MANTRIQ 2.0(VWI)\UI\.next\server\pages\_document.js
+- G:\MANTRIQ 2.0(VWI)\UI\node_modules\next\dist\server\require.js
+- G:\MANTRIQ 2.0(VWI)\UI\node_modules\next\dist\server\load-components.js
+- G:\MANTRIQ 2.0(VWI)\UI\node_modules\next\dist\build\utils.js
+- G:\MANTRIQ 2.0(VWI)\UI\node_modules\next\dist\build\swc\options.js
+- G:\MANTRIQ 2.0(VWI)\UI\node_modules\next\dist\build\swc\index.js
+- G:\MANTRIQ 2.0(VWI)\UI\node_modules\next\dist\build\next-config-ts\transpile-config.js
+- G:\MANTRIQ 2.0(VWI)\UI\node_modules\next\dist\server\config.js
+- G:\MANTRIQ 2.0(VWI)\UI\node_modules\next\dist\cli\next-test.js
+- G:\MANTRIQ 2.0(VWI)\UI\node_modules\next\dist\bin\next] {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [Array]
+}
+^C
