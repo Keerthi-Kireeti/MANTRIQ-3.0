@@ -2,42 +2,81 @@
  * Mentor Database Layer – libSQL / Turso compatible
  *
  * Works on Vercel with Turso cloud, or locally with a file-based SQLite.
- * Set TURSO_DATABASE_URL & TURSO_AUTH_TOKEN for production,
- * or it will auto-fallback to a local file.
+ * Falls back to in-memory storage when no database is configured.
  */
 
-import { createClient, type Client, type InStatement } from "@libsql/client";
+import { createClient, type Client } from "@libsql/client";
+
+// ---------------------------------------------------------------------------
+// In-memory storage for serverless
+// ---------------------------------------------------------------------------
+
+interface InMemoryRecord {
+  id: number;
+  [key: string]: unknown;
+}
+
+interface InMemoryDb {
+  learner_profile: InMemoryRecord[];
+  mentor_session: InMemoryRecord[];
+  session_event: InMemoryRecord[];
+  challenge_template: InMemoryRecord[];
+  challenge_assignment: InMemoryRecord[];
+  challenge_attempt: InMemoryRecord[];
+  mistake_observation: InMemoryRecord[];
+  mistake_pattern: InMemoryRecord[];
+  language_proficiency: InMemoryRecord[];
+  learning_recommendation: InMemoryRecord[];
+  autoIncrement: Record<string, number>;
+}
+
+const inMemoryDb: InMemoryDb = {
+  learner_profile: [],
+  mentor_session: [],
+  session_event: [],
+  challenge_template: [],
+  challenge_assignment: [],
+  challenge_attempt: [],
+  mistake_observation: [],
+  mistake_pattern: [],
+  language_proficiency: [],
+  learning_recommendation: [],
+  autoIncrement: {},
+};
+
+function nextId(table: keyof InMemoryDb): number {
+  inMemoryDb.autoIncrement[table] = (inMemoryDb.autoIncrement[table] || 0) + 1;
+  return inMemoryDb.autoIncrement[table];
+}
 
 // ---------------------------------------------------------------------------
 // Singleton client
 // ---------------------------------------------------------------------------
 
 let _client: Client | null = null;
+let _useInMemory = false;
 
-function getClient(): Client {
+function getClient(): Client | null {
+  if (_useInMemory) return null;
   if (_client) return _client;
 
   const isVercel = process.env.VERCEL === "1";
-  let url: string;
-  let authToken: string | undefined;
+  const url = process.env.TURSO_DATABASE_URL;
+  const authToken = process.env.TURSO_AUTH_TOKEN;
 
-  if (isVercel) {
-    url = process.env.TURSO_DATABASE_URL || "";
-    authToken = process.env.TURSO_AUTH_TOKEN;
-    if (!url) {
-      throw new Error("TURSO_DATABASE_URL is required for Vercel deployment");
-    }
-  } else {
-    url = process.env.TURSO_DATABASE_URL || "file:mentor.db";
-    authToken = process.env.TURSO_AUTH_TOKEN || undefined;
+  if (isVercel && !url) {
+    console.warn("No TURSO_DATABASE_URL configured. Using in-memory storage (data won't persist).");
+    _useInMemory = true;
+    return null;
   }
 
-  _client = createClient({ url, authToken });
+  const dbUrl = url || "file:mentor.db";
+  _client = createClient({ url: dbUrl, authToken });
   return _client;
 }
 
 // ---------------------------------------------------------------------------
-// Language helpers (ported from Python mentor_db.py)
+// Language helpers
 // ---------------------------------------------------------------------------
 
 const LANGUAGE_ALIASES: Record<string, string> = {
@@ -96,7 +135,12 @@ let _initialized = false;
 
 export async function initDb() {
   if (_initialized) return;
+  
   const db = getClient();
+  if (!db) {
+    _initialized = true;
+    return;
+  }
 
   await db.executeMultiple(`
     CREATE TABLE IF NOT EXISTS learner_profile (
@@ -115,8 +159,7 @@ export async function initDb() {
       started_at TEXT NOT NULL,
       ended_at TEXT,
       mode TEXT NOT NULL,
-      metadata TEXT,
-      FOREIGN KEY (learner_id) REFERENCES learner_profile(id)
+      metadata TEXT
     );
 
     CREATE TABLE IF NOT EXISTS session_event (
@@ -124,8 +167,7 @@ export async function initDb() {
       session_id INTEGER NOT NULL,
       event_type TEXT NOT NULL,
       timestamp TEXT NOT NULL,
-      data TEXT NOT NULL,
-      FOREIGN KEY (session_id) REFERENCES mentor_session(id)
+      data TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS challenge_template (
@@ -151,9 +193,7 @@ export async function initDb() {
       assigned_at TEXT NOT NULL,
       started_at TEXT,
       completed_at TEXT,
-      status TEXT DEFAULT 'assigned',
-      FOREIGN KEY (learner_id) REFERENCES learner_profile(id),
-      FOREIGN KEY (challenge_id) REFERENCES challenge_template(id)
+      status TEXT DEFAULT 'assigned'
     );
 
     CREATE TABLE IF NOT EXISTS challenge_attempt (
@@ -165,8 +205,7 @@ export async function initDb() {
       language TEXT NOT NULL,
       feedback TEXT,
       passed INTEGER DEFAULT 0,
-      rubric_score REAL,
-      FOREIGN KEY (assignment_id) REFERENCES challenge_assignment(id)
+      rubric_score REAL
     );
 
     CREATE TABLE IF NOT EXISTS mistake_observation (
@@ -177,8 +216,7 @@ export async function initDb() {
       code_snippet TEXT,
       suggestion TEXT,
       confidence REAL DEFAULT 0.5,
-      detected_at TEXT NOT NULL,
-      FOREIGN KEY (attempt_id) REFERENCES challenge_attempt(id)
+      detected_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS mistake_pattern (
@@ -190,8 +228,7 @@ export async function initDb() {
       description TEXT,
       occurrence_count INTEGER DEFAULT 1,
       last_observed TEXT,
-      first_observed TEXT,
-      FOREIGN KEY (learner_id) REFERENCES learner_profile(id)
+      first_observed TEXT
     );
 
     CREATE TABLE IF NOT EXISTS language_proficiency (
@@ -203,8 +240,7 @@ export async function initDb() {
       attempts_count INTEGER DEFAULT 0,
       successful_attempts INTEGER DEFAULT 0,
       updated_at TEXT NOT NULL,
-      UNIQUE(learner_id, language),
-      FOREIGN KEY (learner_id) REFERENCES learner_profile(id)
+      UNIQUE(learner_id, language)
     );
 
     CREATE TABLE IF NOT EXISTS learning_recommendation (
@@ -214,9 +250,7 @@ export async function initDb() {
       reason TEXT,
       priority REAL DEFAULT 0.5,
       created_at TEXT NOT NULL,
-      expires_at TEXT,
-      FOREIGN KEY (learner_id) REFERENCES learner_profile(id),
-      FOREIGN KEY (challenge_id) REFERENCES challenge_template(id)
+      expires_at TEXT
     );
   `);
 
@@ -228,7 +262,6 @@ export async function initDb() {
 // ---------------------------------------------------------------------------
 
 function now() { return new Date().toISOString(); }
-function rowToObj(row: Record<string, unknown>): Record<string, unknown> { return { ...row }; }
 
 // ---------------------------------------------------------------------------
 // Learner profile
@@ -236,8 +269,27 @@ function rowToObj(row: Record<string, unknown>): Record<string, unknown> { retur
 
 export async function bootstrapLearner(): Promise<Record<string, unknown>> {
   const db = getClient();
+  
+  if (!db) {
+    const existing = inMemoryDb.learner_profile[0];
+    if (existing) return existing;
+    
+    const ts = now();
+    const learner = {
+      id: nextId("learner_profile"),
+      created_at: ts,
+      updated_at: ts,
+      goals: null,
+      preferred_languages: null,
+      current_language: "python",
+      onboarding_complete: 0,
+    };
+    inMemoryDb.learner_profile.push(learner);
+    return learner;
+  }
+
   const existing = await db.execute("SELECT * FROM learner_profile LIMIT 1");
-  if (existing.rows.length > 0) return rowToObj(existing.rows[0] as any);
+  if (existing.rows.length > 0) return { ...existing.rows[0] };
 
   const ts = now();
   const result = await db.execute({
@@ -256,8 +308,13 @@ export async function bootstrapLearner(): Promise<Record<string, unknown>> {
 
 export async function getLearnerProfile(id: number) {
   const db = getClient();
+  
+  if (!db) {
+    return inMemoryDb.learner_profile.find(r => r.id === id) || null;
+  }
+
   const r = await db.execute({ sql: "SELECT * FROM learner_profile WHERE id = ?", args: [id] });
-  return r.rows.length ? rowToObj(r.rows[0] as any) : null;
+  return r.rows.length ? { ...r.rows[0] } : null;
 }
 
 export async function updateLearnerProfile(
@@ -266,6 +323,19 @@ export async function updateLearnerProfile(
 ) {
   const db = getClient();
   const ts = now();
+
+  if (!db) {
+    const profile = inMemoryDb.learner_profile.find(r => r.id === id);
+    if (profile) {
+      if (updates.goals !== undefined) profile.goals = updates.goals;
+      if (updates.preferred_languages !== undefined) profile.preferred_languages = updates.preferred_languages;
+      if (updates.current_language !== undefined) profile.current_language = updates.current_language;
+      if (updates.onboarding_complete !== undefined) profile.onboarding_complete = updates.onboarding_complete;
+      profile.updated_at = ts;
+    }
+    return profile || null;
+  }
+
   const sets: string[] = ["updated_at = ?"];
   const params: unknown[] = [ts];
 
@@ -276,10 +346,6 @@ export async function updateLearnerProfile(
   if (updates.preferred_languages !== undefined) {
     const pl = serializeTextList(updates.preferred_languages, { normalizeLanguages: true });
     sets.push("preferred_languages = ?"); params.push(pl);
-    if (updates.current_language === undefined) {
-      const first = parseTextList(pl)[0];
-      if (first) { sets.push("current_language = ?"); params.push(first); }
-    }
   }
   if (updates.current_language !== undefined) {
     sets.push("current_language = ?"); params.push(normalizeLanguageName(updates.current_language));
@@ -299,19 +365,34 @@ export async function updateLearnerProfile(
 
 export async function seedChallenges() {
   const db = getClient();
-  const count = await db.execute("SELECT COUNT(*) as count FROM challenge_template");
-  if (Number((count.rows[0] as any).count) > 0) return;
-
+  
   const ts = now();
-  const challenges = [
+  const defaultChallenges = [
     { slug: "print-odds-python", title: "Print All Odd Numbers", description: "Write a program that prints all odd numbers from 1 to 10.", language: "python", difficulty: "easy", concept_tags: JSON.stringify(["loops", "conditionals", "basics"]), prompt: "Write a Python program that prints all odd numbers from 1 to 10.", starter_code: "# Write your code here\n", hint_templates: JSON.stringify(["Use a for loop", "Check if number % 2 != 0"]), evaluation_rubric: JSON.stringify({ criteria: ["Correct output", "Code clarity", "Efficient solution"] }) },
     { slug: "fibonacci-python", title: "Fibonacci Sequence", description: "Generate the first N Fibonacci numbers.", language: "python", difficulty: "medium", concept_tags: JSON.stringify(["recursion", "loops", "sequences"]), prompt: "Write a function that returns the first N Fibonacci numbers.", starter_code: "def fibonacci(n):\n    # Your code here\n    pass\n", hint_templates: JSON.stringify(["Initialize with [0, 1]", "Each number is sum of previous two"]), evaluation_rubric: JSON.stringify({ criteria: ["Correct sequence", "Handles edge cases", "Efficient implementation"] }) },
-    { slug: "palindrome-python", title: "Palindrome Checker", description: "Check if a string is a palindrome.", language: "python", difficulty: "easy", concept_tags: JSON.stringify(["strings", "conditionals"]), prompt: "Write a function that checks if a string is a palindrome (reads same forwards and backwards).", starter_code: "def is_palindrome(s):\n    # Your code here\n    pass\n", hint_templates: JSON.stringify(["Reverse the string", "Compare with original"]), evaluation_rubric: JSON.stringify({ criteria: ["Correct palindrome detection", "Handles case sensitivity", "Edge cases"] }) },
-    { slug: "count-words-python", title: "Word Counter", description: "Count the frequency of each word in a text.", language: "python", difficulty: "medium", concept_tags: JSON.stringify(["dictionaries", "strings", "data-structures"]), prompt: "Write a function that returns a dictionary with word frequencies from a given text.", starter_code: "def count_words(text):\n    # Your code here\n    pass\n", hint_templates: JSON.stringify(["Split text into words", "Use a dictionary to track counts"]), evaluation_rubric: JSON.stringify({ criteria: ["Correct word counts", "Handles case", "Performance"] }) },
+    { slug: "palindrome-python", title: "Palindrome Checker", description: "Check if a string is a palindrome.", language: "python", difficulty: "easy", concept_tags: JSON.stringify(["strings", "conditionals"]), prompt: "Write a function that checks if a string is a palindrome.", starter_code: "def is_palindrome(s):\n    # Your code here\n    pass\n", hint_templates: JSON.stringify(["Reverse the string", "Compare with original"]), evaluation_rubric: JSON.stringify({ criteria: ["Correct palindrome detection", "Handles case sensitivity", "Edge cases"] }) },
+    { slug: "count-words-python", title: "Word Counter", description: "Count the frequency of each word in a text.", language: "python", difficulty: "medium", concept_tags: JSON.stringify(["dictionaries", "strings", "data-structures"]), prompt: "Write a function that returns a dictionary with word frequencies.", starter_code: "def count_words(text):\n    # Your code here\n    pass\n", hint_templates: JSON.stringify(["Split text into words", "Use a dictionary to track counts"]), evaluation_rubric: JSON.stringify({ criteria: ["Correct word counts", "Handles case", "Performance"] }) },
     { slug: "sum-array-python", title: "Array Sum", description: "Calculate the sum of all elements in an array.", language: "python", difficulty: "easy", concept_tags: JSON.stringify(["arrays", "loops", "basics"]), prompt: "Write a function that returns the sum of all numbers in a list.", starter_code: "def sum_array(arr):\n    # Your code here\n    pass\n", hint_templates: JSON.stringify(["Initialize sum to 0", "Iterate through array", "Add each element"]), evaluation_rubric: JSON.stringify({ criteria: ["Correct sum", "Handles empty array", "Clarity"] }) },
   ];
 
-  for (const ch of challenges) {
+  if (!db) {
+    if (inMemoryDb.challenge_template.length === 0) {
+      for (const ch of defaultChallenges) {
+        inMemoryDb.challenge_template.push({
+          id: nextId("challenge_template"),
+          ...ch,
+          created_at: ts,
+          updated_at: ts,
+        });
+      }
+    }
+    return;
+  }
+
+  const count = await db.execute("SELECT COUNT(*) as count FROM challenge_template");
+  if (Number((count.rows[0] as any).count) > 0) return;
+
+  for (const ch of defaultChallenges) {
     await db.execute({
       sql: `INSERT INTO challenge_template (slug, title, description, language, difficulty, concept_tags, prompt, starter_code, hint_templates, evaluation_rubric, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -327,6 +408,13 @@ export async function seedChallenges() {
 export async function startSession(learnerId: number, mode: string): Promise<number> {
   const db = getClient();
   const ts = now();
+  
+  if (!db) {
+    const id = nextId("mentor_session");
+    inMemoryDb.mentor_session.push({ id, learner_id: learnerId, started_at: ts, mode, metadata: null });
+    return id;
+  }
+
   const r = await db.execute({
     sql: "INSERT INTO mentor_session (learner_id, started_at, mode) VALUES (?, ?, ?)",
     args: [learnerId, ts, mode],
@@ -336,14 +424,35 @@ export async function startSession(learnerId: number, mode: string): Promise<num
 
 export async function endSession(sessionId: number) {
   const db = getClient();
-  await db.execute({ sql: "UPDATE mentor_session SET ended_at = ? WHERE id = ?", args: [now(), sessionId] });
+  const ts = now();
+  
+  if (!db) {
+    const session = inMemoryDb.mentor_session.find(s => s.id === sessionId);
+    if (session) session.ended_at = ts;
+    return;
+  }
+
+  await db.execute({ sql: "UPDATE mentor_session SET ended_at = ? WHERE id = ?", args: [ts, sessionId] });
 }
 
 export async function logEvent(sessionId: number, eventType: string, data: unknown) {
   const db = getClient();
+  const ts = now();
+  
+  if (!db) {
+    inMemoryDb.session_event.push({
+      id: nextId("session_event"),
+      session_id: sessionId,
+      event_type: eventType,
+      timestamp: ts,
+      data: JSON.stringify(data),
+    });
+    return;
+  }
+
   await db.execute({
     sql: "INSERT INTO session_event (session_id, event_type, timestamp, data) VALUES (?, ?, ?, ?)",
-    args: [sessionId, eventType, now(), JSON.stringify(data)],
+    args: [sessionId, eventType, ts, JSON.stringify(data)],
   });
 }
 
@@ -355,6 +464,19 @@ export async function getChallengeTemplates(
   opts?: { language?: string; concept?: string; difficulty?: string }
 ) {
   const db = getClient();
+  
+  if (!db) {
+    let results = [...inMemoryDb.challenge_template];
+    if (opts?.language) {
+      const lang = (normalizeLanguageName(opts.language) ?? opts.language).toLowerCase();
+      results = results.filter(r => String(r.language).toLowerCase() === lang);
+    }
+    if (opts?.difficulty) {
+      results = results.filter(r => String(r.difficulty).toLowerCase() === opts.difficulty!.toLowerCase());
+    }
+    return results;
+  }
+
   let sql = "SELECT * FROM challenge_template WHERE 1 = 1";
   const args: unknown[] = [];
 
@@ -373,13 +495,18 @@ export async function getChallengeTemplates(
   sql += " ORDER BY title";
 
   const r = await db.execute({ sql, args: args as any });
-  return r.rows.map((row) => rowToObj(row as any));
+  return r.rows.map((row) => ({ ...row }));
 }
 
 export async function getChallengeTemplate(id: number) {
   const db = getClient();
+  
+  if (!db) {
+    return inMemoryDb.challenge_template.find(r => r.id === id) || null;
+  }
+
   const r = await db.execute({ sql: "SELECT * FROM challenge_template WHERE id = ?", args: [id] });
-  return r.rows.length ? rowToObj(r.rows[0] as any) : null;
+  return r.rows.length ? { ...r.rows[0] } : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -388,32 +515,73 @@ export async function getChallengeTemplate(id: number) {
 
 export async function createChallengeAssignment(learnerId: number, challengeId: number): Promise<number> {
   const db = getClient();
+  const ts = now();
+  
+  if (!db) {
+    const id = nextId("challenge_assignment");
+    inMemoryDb.challenge_assignment.push({
+      id,
+      learner_id: learnerId,
+      challenge_id: challengeId,
+      assigned_at: ts,
+      status: "assigned",
+    });
+    return id;
+  }
+
   const r = await db.execute({
     sql: "INSERT INTO challenge_assignment (learner_id, challenge_id, assigned_at, status) VALUES (?, ?, ?, ?)",
-    args: [learnerId, challengeId, now(), "assigned"],
+    args: [learnerId, challengeId, ts, "assigned"],
   });
   return Number(r.lastInsertRowid);
 }
 
 export async function getChallengeAssignment(id: number) {
   const db = getClient();
+  
+  if (!db) {
+    return inMemoryDb.challenge_assignment.find(r => r.id === id) || null;
+  }
+
   const r = await db.execute({ sql: "SELECT * FROM challenge_assignment WHERE id = ?", args: [id] });
-  return r.rows.length ? rowToObj(r.rows[0] as any) : null;
+  return r.rows.length ? { ...r.rows[0] } : null;
 }
 
 export async function startChallenge(assignmentId: number) {
   const db = getClient();
+  const ts = now();
+  
+  if (!db) {
+    const assignment = inMemoryDb.challenge_assignment.find(r => r.id === assignmentId);
+    if (assignment && !assignment.started_at) {
+      assignment.started_at = ts;
+      assignment.status = "started";
+    }
+    return;
+  }
+
   await db.execute({
     sql: "UPDATE challenge_assignment SET started_at = COALESCE(started_at, ?), status = ? WHERE id = ?",
-    args: [now(), "started", assignmentId],
+    args: [ts, "started", assignmentId],
   });
 }
 
 export async function completeChallengeAssignment(assignmentId: number) {
   const db = getClient();
+  const ts = now();
+  
+  if (!db) {
+    const assignment = inMemoryDb.challenge_assignment.find(r => r.id === assignmentId);
+    if (assignment) {
+      assignment.completed_at = ts;
+      assignment.status = "completed";
+    }
+    return;
+  }
+
   await db.execute({
     sql: "UPDATE challenge_assignment SET completed_at = ?, status = ? WHERE id = ?",
-    args: [now(), "completed", assignmentId],
+    args: [ts, "completed", assignmentId],
   });
 }
 
@@ -423,15 +591,37 @@ export async function completeChallengeAssignment(assignmentId: number) {
 
 export async function createChallengeAttempt(assignmentId: number, attemptNumber: number, code: string, language: string): Promise<number> {
   const db = getClient();
+  const ts = now();
+  
+  if (!db) {
+    const id = nextId("challenge_attempt");
+    inMemoryDb.challenge_attempt.push({
+      id,
+      assignment_id: assignmentId,
+      attempt_number: attemptNumber,
+      submitted_at: ts,
+      code,
+      language: normalizeLanguageName(language) ?? "python",
+    });
+    return id;
+  }
+
   const r = await db.execute({
     sql: "INSERT INTO challenge_attempt (assignment_id, attempt_number, submitted_at, code, language) VALUES (?, ?, ?, ?, ?)",
-    args: [assignmentId, attemptNumber, now(), code, normalizeLanguageName(language) ?? "python"],
+    args: [assignmentId, attemptNumber, ts, code, normalizeLanguageName(language) ?? "python"],
   });
   return Number(r.lastInsertRowid);
 }
 
 export async function getNextAttemptNumber(assignmentId: number): Promise<number> {
   const db = getClient();
+  
+  if (!db) {
+    const attempts = inMemoryDb.challenge_attempt.filter(r => r.assignment_id === assignmentId);
+    const maxAttempt = attempts.reduce((max, r) => Math.max(max, Number(r.attempt_number) || 0), 0);
+    return maxAttempt + 1;
+  }
+
   const r = await db.execute({
     sql: "SELECT COALESCE(MAX(attempt_number), 0) AS m FROM challenge_attempt WHERE assignment_id = ?",
     args: [assignmentId],
@@ -441,6 +631,17 @@ export async function getNextAttemptNumber(assignmentId: number): Promise<number
 
 export async function updateChallengeAttempt(id: number, u: { feedback?: string; passed?: number; rubric_score?: number }) {
   const db = getClient();
+  
+  if (!db) {
+    const attempt = inMemoryDb.challenge_attempt.find(r => r.id === id);
+    if (attempt) {
+      if (u.feedback !== undefined) attempt.feedback = u.feedback;
+      if (u.passed !== undefined) attempt.passed = u.passed;
+      if (u.rubric_score !== undefined) attempt.rubric_score = u.rubric_score;
+    }
+    return;
+  }
+
   const sets: string[] = [];
   const args: unknown[] = [];
   if (u.feedback !== undefined) { sets.push("feedback = ?"); args.push(u.feedback); }
@@ -453,11 +654,17 @@ export async function updateChallengeAttempt(id: number, u: { feedback?: string;
 
 export async function getLatestAttemptForAssignment(assignmentId: number) {
   const db = getClient();
+  
+  if (!db) {
+    const attempts = inMemoryDb.challenge_attempt.filter(r => r.assignment_id === assignmentId);
+    return attempts.sort((a, b) => Number(b.attempt_number) - Number(a.attempt_number))[0] || null;
+  }
+
   const r = await db.execute({
     sql: "SELECT * FROM challenge_attempt WHERE assignment_id = ? ORDER BY attempt_number DESC LIMIT 1",
     args: [assignmentId],
   });
-  return r.rows.length ? rowToObj(r.rows[0] as any) : null;
+  return r.rows.length ? { ...r.rows[0] } : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -466,19 +673,60 @@ export async function getLatestAttemptForAssignment(assignmentId: number) {
 
 export async function recordMistake(attemptId: number, m: { mistake_type: string; description?: string; code_snippet?: string; suggestion?: string; confidence?: number }) {
   const db = getClient();
+  const ts = now();
+  
+  if (!db) {
+    inMemoryDb.mistake_observation.push({
+      id: nextId("mistake_observation"),
+      attempt_id: attemptId,
+      mistake_type: m.mistake_type,
+      description: m.description ?? null,
+      code_snippet: m.code_snippet ?? null,
+      suggestion: m.suggestion ?? null,
+      confidence: m.confidence ?? 0.5,
+      detected_at: ts,
+    });
+    return;
+  }
+
   await db.execute({
     sql: "INSERT INTO mistake_observation (attempt_id, mistake_type, description, code_snippet, suggestion, confidence, detected_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    args: [attemptId, m.mistake_type, m.description ?? null, m.code_snippet ?? null, m.suggestion ?? null, m.confidence ?? 0.5, now()],
+    args: [attemptId, m.mistake_type, m.description ?? null, m.code_snippet ?? null, m.suggestion ?? null, m.confidence ?? 0.5, ts],
   });
 }
 
 export async function updateOrCreateMistakePattern(learnerId: number, mistakeType: string, language: string | null, description: string) {
   const db = getClient();
+  const ts = now();
+  
+  if (!db) {
+    const existing = inMemoryDb.mistake_pattern.find(
+      r => r.learner_id === learnerId && r.mistake_type === mistakeType && r.language === language
+    );
+    if (existing) {
+      existing.occurrence_count = Number(existing.occurrence_count || 1) + 1;
+      existing.last_observed = ts;
+    } else {
+      inMemoryDb.mistake_pattern.push({
+        id: nextId("mistake_pattern"),
+        learner_id: learnerId,
+        language,
+        mistake_type: mistakeType,
+        tags: null,
+        description,
+        occurrence_count: 1,
+        last_observed: ts,
+        first_observed: ts,
+      });
+    }
+    return;
+  }
+
   const existing = await db.execute({
     sql: "SELECT id, occurrence_count FROM mistake_pattern WHERE learner_id = ? AND mistake_type = ? AND language IS ?",
     args: [learnerId, mistakeType, language],
   });
-  const ts = now();
+  
   if (existing.rows.length) {
     const row = existing.rows[0] as any;
     await db.execute({
@@ -495,11 +743,19 @@ export async function updateOrCreateMistakePattern(learnerId: number, mistakeTyp
 
 export async function getRecentMistakes(learnerId: number, limit = 10) {
   const db = getClient();
+  
+  if (!db) {
+    return inMemoryDb.mistake_pattern
+      .filter(r => r.learner_id === learnerId)
+      .sort((a, b) => String(b.last_observed || "").localeCompare(String(a.last_observed || "")))
+      .slice(0, limit);
+  }
+
   const r = await db.execute({
     sql: "SELECT DISTINCT * FROM mistake_pattern WHERE learner_id = ? ORDER BY last_observed DESC LIMIT ?",
     args: [learnerId, limit],
   });
-  return r.rows.map((row) => rowToObj(row as any));
+  return r.rows.map((row) => ({ ...row }));
 }
 
 // ---------------------------------------------------------------------------
@@ -508,11 +764,16 @@ export async function getRecentMistakes(learnerId: number, limit = 10) {
 
 export async function getLanguageProficiencies(learnerId: number) {
   const db = getClient();
+  
+  if (!db) {
+    return inMemoryDb.language_proficiency.filter(r => r.learner_id === learnerId);
+  }
+
   const r = await db.execute({
     sql: "SELECT * FROM language_proficiency WHERE learner_id = ? ORDER BY language",
     args: [learnerId],
   });
-  return r.rows.map((row) => rowToObj(row as any));
+  return r.rows.map((row) => ({ ...row }));
 }
 
 export async function updateLanguageProficiency(learnerId: number, language: string, score: number, attempts: number, successes: number) {
@@ -521,6 +782,31 @@ export async function updateLanguageProficiency(learnerId: number, language: str
   const lang = normalizeLanguageName(language) ?? "python";
   score = Math.max(0, Math.min(1, score));
   const level = score >= 0.8 ? "expert" : score >= 0.6 ? "advanced" : score >= 0.4 ? "intermediate" : "beginner";
+  
+  if (!db) {
+    const existing = inMemoryDb.language_proficiency.find(
+      r => r.learner_id === learnerId && r.language === lang
+    );
+    if (existing) {
+      existing.score = score;
+      existing.level = level;
+      existing.attempts_count = attempts;
+      existing.successful_attempts = successes;
+      existing.updated_at = ts;
+    } else {
+      inMemoryDb.language_proficiency.push({
+        id: nextId("language_proficiency"),
+        learner_id: learnerId,
+        language: lang,
+        level,
+        score,
+        attempts_count: attempts,
+        successful_attempts: successes,
+        updated_at: ts,
+      });
+    }
+    return;
+  }
 
   const existing = await db.execute({
     sql: "SELECT id FROM language_proficiency WHERE learner_id = ? AND language = ?",
@@ -546,6 +832,13 @@ export async function updateLanguageProficiency(learnerId: number, language: str
 
 export async function getCompletedChallengeIds(learnerId: number): Promise<number[]> {
   const db = getClient();
+  
+  if (!db) {
+    return inMemoryDb.challenge_assignment
+      .filter(r => r.learner_id === learnerId && r.status === "completed")
+      .map(r => Number(r.challenge_id));
+  }
+
   const r = await db.execute({
     sql: "SELECT DISTINCT challenge_id FROM challenge_assignment WHERE learner_id = ? AND status = 'completed'",
     args: [learnerId],
@@ -559,6 +852,29 @@ export async function getCompletedChallengeIds(learnerId: number): Promise<numbe
 
 export async function getDashboardMetrics(learnerId: number) {
   const db = getClient();
+  
+  if (!db) {
+    const completed = inMemoryDb.challenge_assignment.filter(
+      r => r.learner_id === learnerId && r.status === "completed"
+    ).length;
+    
+    const attempts = inMemoryDb.challenge_attempt.filter(r => {
+      const assignment = inMemoryDb.challenge_assignment.find(a => a.id === r.assignment_id);
+      return assignment && assignment.learner_id === learnerId;
+    });
+    
+    const totalAttempts = attempts.length;
+    const lastDate = attempts.length > 0 
+      ? attempts.sort((a, b) => String(b.submitted_at || "").localeCompare(String(a.submitted_at || "")))[0]?.submitted_at 
+      : null;
+    
+    return {
+      challenges_completed: completed,
+      total_attempts: totalAttempts,
+      last_attempt_date: lastDate ?? null,
+      current_streak: 0,
+    };
+  }
 
   const cc = await db.execute({
     sql: "SELECT COUNT(*) AS c FROM challenge_assignment WHERE learner_id = ? AND status = 'completed'",
