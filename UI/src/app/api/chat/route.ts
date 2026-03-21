@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ensureMentorReady } from "@/lib/mentor/init";
-import * as svc from "@/lib/mentor/service";
 import { GoogleGenAI } from "@google/genai";
 
+export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
-    await ensureMentorReady();
 
     const { mode, code, language, prompt } = await request.json();
 
@@ -79,7 +77,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Chat API Error:", error);
     return NextResponse.json(
-      { error: "Internal server error connecting to AI Mentor" },
+      { error: "Internal server error connecting to AI Mentor. " + (error instanceof Error ? error.message : String(error)) },
       { status: 500 }
     );
   }
