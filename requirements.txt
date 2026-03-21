@@ -1,6 +1,6 @@
 Flask
 Flask-Cors
-langchain_ollama
+google-genai
 langchain_core
 langchain
 python-dotenv
