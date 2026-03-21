@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureMentorReady } from "@/lib/mentor/init";
 import * as svc from "@/lib/mentor/service";
+import { GoogleGenAI } from "@google/genai";
 
 export const dynamic = "force-dynamic";
 
@@ -25,8 +26,6 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Import GoogleGenAI directly here so it loads fast
-    const { GoogleGenAI } = require("@google/genai");
     const ai = new GoogleGenAI({ apiKey });
 
     let mentorPrompt = "";

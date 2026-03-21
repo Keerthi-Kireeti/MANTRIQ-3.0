@@ -60,7 +60,7 @@ function getClient(): Client | null {
   if (_useInMemory) return null;
   if (_client) return _client;
 
-  const isVercel = process.env.VERCEL === "1";
+  const isVercel = !!process.env.VERCEL || process.env.NODE_ENV === "production" && !process.env.TURSO_DATABASE_URL;
   const url = process.env.TURSO_DATABASE_URL;
   const authToken = process.env.TURSO_AUTH_TOKEN;
 
