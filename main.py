@@ -1,6 +1,9 @@
 import os
+import dotenv
 from google import genai
 from google.genai import types
+
+dotenv.load_dotenv()
 
 def main():
     print("Welcome to the coding assistant!")
