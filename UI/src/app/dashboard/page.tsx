@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Terminal, Loader2, FileUp, X, GitCompareArrows, Undo2, Redo2, Wand2, Save } from "lucide-react";
 import { FiSend } from "react-icons/fi";
@@ -29,7 +29,7 @@ const itemVariants = {
 
 interface Message {
   role: "user" | "assistant" | "system";
-  content: string | JSX.Element;
+  content: string | React.ReactElement;
 }
 
 export default function Dashboard() {
@@ -210,7 +210,7 @@ export default function Dashboard() {
       setInput(`Explain the following ${language} code:`);
 
       // Record step for file upload state
-      const nextMessages = [
+      const nextMessages: Message[] = [
         ...messagesRef.current,
         { role: "system", content: `File uploaded: ${file.name}` },
       ];
