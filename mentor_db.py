@@ -75,7 +75,7 @@ def parse_text_list(value: Optional[Any]) -> List[str]:
         return []
 
     if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
+        return [str(item).strip() for item in value if item is not None and str(item).strip()]
 
     text = str(value).strip()
     if not text:
@@ -85,7 +85,7 @@ def parse_text_list(value: Optional[Any]) -> List[str]:
         try:
             parsed = json.loads(text)
             if isinstance(parsed, list):
-                return [str(item).strip() for item in parsed if str(item).strip()]
+                return [str(item).strip() for item in parsed if item is not None and str(item).strip()]
         except json.JSONDecodeError:
             pass
 
@@ -320,7 +320,8 @@ def seed_challenges():
 
     # Check if already seeded
     cursor.execute("SELECT COUNT(*) as count FROM challenge_template")
-    count = cursor.fetchone()["count"]
+    row = cursor.fetchone()
+    count = int(row["count"] or 0) if row else 0
 
     if count > 0:
         conn.close()
@@ -465,7 +466,7 @@ def get_learner_profile(learner_id: int) -> Optional[Dict[str, Any]]:
     cursor.execute("SELECT * FROM learner_profile WHERE id = ?", (learner_id,))
     profile = cursor.fetchone()
     conn.close()
-    return dict(profile) if profile else None
+    return dict(profile) if profile else {}
 
 
 def update_learner_profile(learner_id: int, goals: Optional[str] = None, 
@@ -509,7 +510,7 @@ def update_learner_profile(learner_id: int, goals: Optional[str] = None,
 
     updated = get_learner_profile(learner_id)
     conn.close()
-    return updated
+    return updated or {}
 
 
 def get_language_proficiencies(learner_id: int) -> List[Dict[str, Any]]:
@@ -718,7 +719,7 @@ def get_next_attempt_number(assignment_id: int) -> int:
     """, (assignment_id,))
     row = cursor.fetchone()
     conn.close()
-    return int(row["max_attempt_number"] or 0) + 1
+    return 1 if row is None else int(row["max_attempt_number"] or 0) + 1
 
 
 def update_challenge_attempt(attempt_id: int, feedback: Optional[str] = None,

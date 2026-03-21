@@ -6,6 +6,7 @@
  */
 
 import * as db from "./db";
+import { getLessonContent } from "./lessonContent";
 
 // ---------------------------------------------------------------------------
 // Language knowledge base
@@ -189,20 +190,62 @@ function generateReviewResponse(code: string, prompt: string, language: string):
 }
 
 function generateTeachResponse(prompt: string, language: string): string {
-  const lines: string[] = [`## Lesson: ${prompt.split("\n")[0].replace("Topic: ", "")} (${language})\n`];
-  lines.push("Welcome to this lesson! Let's break down this concept.\n");
-  
-  lines.push(`### Concept Overview\n`);
-  lines.push(`${getTip(language, prompt)} \n`);
-  
-  lines.push(`### How it works\n`);
-  lines.push(`1. Use proper syntax and language features.\n`);
-  lines.push(`2. Keep it clean and readable.\n`);
-  lines.push(`3. Follow the standard conventions for ${language}.\n`);
+  // Extract topic name and description from the prompt
+  // Prompt format: "Topic: <name>\nDescription: <desc>\nPlease teach me..."
+  const topicMatch = prompt.match(/Topic:\s*(.+)/);
+  const descMatch  = prompt.match(/Description:\s*(.+)/);
+  const topicName  = topicMatch?.[1]?.trim() ?? prompt.split("\n")[0].trim();
+  const topicDesc  = descMatch?.[1]?.trim() ?? "";
 
-  lines.push(`\n### Your Exercise\n`);
-  lines.push(`Now it's your turn to practice! Write a short program that demonstrates this concept. Use the code editor to write your code and click **Run & Review** to have it evaluated.\n`);
-  
+  const lines: string[] = [];
+  lines.push(`## Lesson: ${topicName} (${language})\n`);
+
+  // Try rich lesson content first
+  const rich = getLessonContent(language, topicName);
+
+  if (rich) {
+    lines.push(`> **What you'll learn:** ${topicDesc || topicName}\n`);
+    lines.push(`---\n`);
+
+    lines.push(`### 📖 Explanation\n`);
+    lines.push(rich.explanation + "\n");
+
+    lines.push(`\n---\n`);
+    lines.push(`### 💻 Code Example\n`);
+    lines.push("```" + (
+      language === "C++" ? "cpp" :
+      language === "C#"  ? "csharp" :
+      language.toLowerCase()
+    ) + "\n" + rich.codeExample + "\n```\n");
+
+    lines.push(`\n---\n`);
+    lines.push(`### ✏️ Your Exercise\n`);
+    lines.push(rich.exercise + "\n");
+    lines.push("\nWrite your solution in the code editor and click **Run & Review** to get AI feedback!\n");
+  } else {
+    // Fallback for topics not yet in the lesson library
+    lines.push(`Welcome to this lesson on **${topicName}** in ${language}!\n`);
+    if (topicDesc) {
+      lines.push(`### 📖 What we'll cover\n`);
+      lines.push(`${topicDesc}\n`);
+    }
+
+    lines.push(`### 🧠 Concept Overview\n`);
+    lines.push(getTip(language, topicName) + "\n");
+
+    lines.push(`### 📋 Key Points\n`);
+    lines.push(`1. Understand the core syntax and semantics in **${language}**.\n`);
+    lines.push(`2. Know when and why to use this feature.\n`);
+    lines.push(`3. Follow standard conventions and best practices.\n`);
+    lines.push(`4. Practice by writing small, focused programs.\n`);
+
+    lines.push(`\n### ✏️ Your Exercise\n`);
+    lines.push(`Write a program in **${language}** that demonstrates **${topicName}**:\n`);
+    lines.push(`- Use the concept described above\n`);
+    lines.push(`- Make your code clear and well-commented\n`);
+    lines.push(`- Click **Run & Review** to receive AI feedback on your solution\n`);
+  }
+
   return lines.join("\n");
 }
 
